@@ -169,8 +169,8 @@ def load_data(so,nfiles='all',stelmod='kurucz'):
     so.tapname     = 'TAPAS/tapas_oxygen.fits'
     so.tapname_h2o = 'TAPAS/tapas_water.fits'
 
-    tapas    = fits.open(so.datapath + so.tapname) # oxygen
-    so.tap.v = tapas[1].data['wavenumber']
+    tapas     = fits.open(so.datapath + so.tapname) # oxygen
+    so.tap.v  = tapas[1].data['wavenumber']
     so.tap.o2 = tapas[1].data['transmittance']
     tapas.close()
 
@@ -240,44 +240,50 @@ def save_spectrum(fname,tobs,params,pnames,stdp,l,f,res):
 def define_pararr(data,nlines,nspec,pstart=None):
 	# For each, define name and value
 	params = np.concatenate((np.ones(1),          # stau
-							np.ones(1),           # press
+							np.ones(1),           # o2_tau
 							np.zeros(2),	      # cont
-							np.ones(nspec)*1e-3,  # sigs D
+							np.zeros(1),          # o2_dnu
 							np.zeros(nspec),      # dnu
 							np.zeros(nspec),      # vel
 							np.ones(nspec),       # taus
 							data['gamma-air'],    # sigs L
 							data['gamma-SD'],     # sigs 2
-							np.log10(data['S'])))  # deps
+							data['linecenter'],  # linecents
+							np.log10(data['S'])           # line strength
+							))         
 							
 	par_lo = np.concatenate((np.ones(1)*0.99,      # stau
-							np.ones(1)*0.97, 	   # press
+							np.ones(1)*0.1, 	   # o2_tau
 							np.zeros(2)-0.1,       # cont
-							np.ones(nspec)*1e-6,   # sig_D
+							np.zeros(1)-0.5,       # o2_dnu
 							np.zeros(nspec)-0.5,   # dnu
 							np.zeros(nspec)-0.8,   # vel
 							np.ones(nspec)*0.1,    # taus
-                            data['gamma-air']*0.9,     # sigs
-							data['gamma-SD']*0.9,      # sigs
-							np.log10(data['S'])-0.6))   # deps
+                            data['gamma-air']*0.5,     # sigs
+							data['gamma-SD']*0.5,      # sigs
+							data['linecenter']-0.01,   # linecents
+							np.log10(data['S'])-0.3            # line strength
+							))         
 
-						
+
 	par_hi = np.concatenate(( 
 							np.ones(1)*1.1,          # stau
-							np.ones(1)*1.03,         # press
+							np.ones(1)*10,           # o2_tau
 							np.zeros(2)+0.1,         # continuum
-							np.ones(nspec)*0.01,     # sig_D
+							np.zeros(1)+0.5,         # o2_dnu
 							np.zeros(nspec)+0.5,     # dnu
 							np.zeros(nspec)+0.8,     # vel
 							np.ones(nspec)*30.0,     # taus
-							data['gamma-air']*1.1,   # sigs0
-							data['gamma-SD']*1.1,    # sigs2
-							np.log10(data['S'])+1.0)) # deps
+							data['gamma-air']*1.5,   # sigs0
+							data['gamma-SD']*1.5,    # sigs2
+							data['linecenter']+0.01, # linecents
+							np.log10(data['S'])+0.3            # line strength
+							))         
 
 
 
 	parnames = np.array(['stau'] + 
-    					 ['press'] +
+    					 ['o2_tau'] +
     					 ['cont']*2 +
     					 ['sigsD'] * nspec +
 						 ['dnu']  * nspec + 
@@ -285,7 +291,8 @@ def define_pararr(data,nlines,nspec,pstart=None):
 						 ['taus'] * nspec + 
 						 ['sigs0'] * nlines + 
 						 ['sigs2'] * nlines +
-						 ['depths'] * nlines
+						 ['linecents'] * nlines +
+						 ['S'] * nlines
     					 )
 		
 	bounds = []
@@ -296,52 +303,9 @@ def define_pararr(data,nlines,nspec,pstart=None):
 	return parnames, params, bounds
 
 
-def define_pararr2(data,nlines,nspec):
-	# For each, define name and value
-	params = np.concatenate((data['gamma-air'],     # sigs
-							data['gamma-SD'],      # sigs
-							np.log10(data['S']),  # deps
-							np.zeros(nlines)+1e-5,     # Shift0
-							np.zeros(nlines)+1e-4,    # Shift2
-							np.zeros(nlines)+ 0.01,    # anuVc
-							np.zeros(nlines) + 0.01))  # eta
-	
-	par_lo = np.concatenate((data['gamma-air']*0.1,   # sigs
-							data['gamma-SD']*0.2,     # sigs2
-							np.log10(data['S'])-0.5,  # deps
-							np.zeros(nlines)-0.1,     # Shift0
-							np.zeros(nlines)- 0.001,    # Shift2
-							np.zeros(nlines)-  0.05,    # anuVc
-							np.zeros(nlines)- 0.1))  # eta
-
-						
-	par_hi = np.concatenate((data['gamma-air']*1.3,   # sigs0
-							data['gamma-SD']*7.0,    # sigs2
-							np.log10(data['S'])+0.6,  # deps
-							np.zeros(nlines)+0.1,     # Shift0
-							np.zeros(nlines)+0.001,    # Shift2
-							np.zeros(nlines)+ 0.05,    # anuVc
-							np.zeros(nlines) + 0.1))   # eta
-
-
-
-	parnames = np.array( ['sigs0'] * nlines + 
-						 ['sigs2'] * nlines +
-						 ['depths'] * nlines +
-						 ['Shift0'] * nlines + 
-						 ['Shift2'] * nlines +
-						 ['anuVc'] * nlines +
-						 ['eta']   * nlines
-    					 )
-	bounds = []
-	
-	for i in range(len(par_lo)):
-		bounds.append([par_lo[i],par_hi[i]])
-		
-	return parnames, params, bounds
 	
 	
-def func(params, v, s,  unc, hitran_data, stel_mod, iline = None, mode='sum'):
+def func(params, v, s,  unc, hitran_data, stel_mod, o2_mod, iline = None, mode='sum'):
     """
     Minimization function
 
@@ -363,22 +327,24 @@ def func(params, v, s,  unc, hitran_data, stel_mod, iline = None, mode='sum'):
     nspec  = len(s)
 
     # Extract Paramaters from params array
-    m = 4      # number of fixed-defined variables
+    m = 5      # number of fixed-defined variables
     stau = params[0:1]
-    pres = params[1:2]
-    cont = params[2:4]
-    sig_D= params[m : m + nspec]
-    dnu  = params[m + nspec : m + 2*nspec]
-    vel  = params[m + 2*nspec : m + 3*nspec]
-    taus = params[m + 3*nspec : m + 4*nspec]
-    sigs0 = params[m + 4*nspec: m + 4*nspec + nlines] # defined as percentage of original value
-    sigs2 = params[m + 4*nspec + nlines: m + 4*nspec + 2*nlines]
-    deps  = params[m + 4*nspec + 2*nlines: m + 4*nspec + 3*nlines]
+    o2_tau = params[1:2]
+    cont   = params[2:4]
+    o2_dnu = params[4:5]
+    dnu  = params[m  : m + nspec]
+    vel  = params[m + nspec : m + 2*nspec]
+    taus = params[m + 2*nspec : m + 3*nspec]
+    sigs0 = params[m + 3*nspec: m + 3*nspec + nlines] # defined as percentage of original value
+    sigs2 = params[m + 3*nspec + nlines: m + 3*nspec + 2*nlines]
+    linecents  = params[m + 3*nspec + 2*nlines: m + 3*nspec + 3*nlines]
+    strengths  = params[m + 3*nspec + 3*nlines: m + 3*nspec + 4*nlines]
 
     hitran_data['gamma-air']  = sigs0   # fill in whichever hitran variable deciding to vary
-    hitran_data['gamma-SD'] = sigs2     # Speed dependent voigt
-    hitran_data['S'] = 10**deps
-	
+    hitran_data['gamma-SD']   = sigs2     # Speed dependent voigt
+    hitran_data['linecenter'] = linecents
+    hitran_data['S'] = 10**strengths
+    
 	# Scale density of molecules/scalar the same for everything
     dens  = 5e27
 	
@@ -386,28 +352,30 @@ def func(params, v, s,  unc, hitran_data, stel_mod, iline = None, mode='sum'):
     model = np.zeros(np.shape(s))
     
     for i in range(len(s)):
-	    hitran_data['sig_D'] = sig_D[i]
 	    tck      = interpolate.splrep(v[::-1]*(1+vel[i]/3.0e5),stel_mod[::-1]*stau, s=0)
 	    stel     = interpolate.splev(v,tck,der=0)
+        # O2 Shift
+	    tck      = interpolate.splrep(v[::-1]*(1+o2_dnu/3.0e5),o2_mod[::-1]*o2_tau, s=0)
+	    o2       = interpolate.splev(v,tck,der=0)
 		# Telluric component
 	    v_shift  = v*(1 + dnu[i]/3.0e5)
-	    telluric = calculate_hitran_xsec(hitran_data, wavenumarr=v_shift, npts=20001, units='m^2', temp=296.0, pressure=pres)
+	    telluric = calculate_hitran_xsec(hitran_data, wavenumarr=v_shift, npts=20001, units='m^2', temp=296.0, pressure=1.0)
 		# Continuum
 	    continuum_slope = (cont[0] - cont[1])/(v[0] - v[-1])
 	    continuum       = continuum_slope * (v - v[0])  + cont[0]
 	    # Get kernel to convolve with
 	    #		K = kernel(v, 4, a[i])
 	    # define model
-	    model[i] = stel + taus[i] * dens * telluric[1] - continuum
+	    model[i] = stel + taus[i] * dens * telluric[1] + continuum + o2
         
     if mode =='sum':
-    	return np.sum(((model - s)**2)/unc)/10000
+    	return np.sum(((model - s)**2)/unc)/1000
     elif mode == 'get_model':
     	return model,stel
     elif mode=='get_line':
         hitran_data['S'][iline] = 0
-        telluric_mod = calculate_hitran_xsec(hitran_data, wavenumarr=v_shift, npts=20001, units='m^2', temp=296.0, pressure=pres)		
-        return (s[0] - (stel + taus[i] * dens * telluric_mod[1] - continuum))
+        telluric_mod = calculate_hitran_xsec(hitran_data, wavenumarr=v_shift, npts=20001, units='m^2', temp=296.0, pressure=1.0)		
+        return (s[0] - (stel + taus[i] * dens * telluric_mod[1] + continuum + o2))
     	
     	
 
@@ -463,10 +431,10 @@ def setup_data(ifold, center, dk):
 
 
 #if __name__ == '__main__':
-for ispec in range(0,9):
+for ispec in range(0,1):
     # User chosen things
     ifold           = 0  #folder index to work on
-    icent           = 3
+    icent           = 7
 #    ispec           = 0 
     
     # Load linecents
@@ -477,8 +445,8 @@ for ispec in range(0,9):
     s = s[ispec:ispec+1]   
     #data = read_hitran2012_parfile('HITRAN/h2o_15429_15449.par')
     data = read_hitran2012_parfile('HITRAN/h2o_%s.par' %int(linecenters[icent]))
-    
-    data['sig_D'] = 0.01 # change how I pass sigma Doppler to hitran spec maker
+        
+    data['sig_D'] = 0.001
     
     # STorage arrays
     nspec = len(s)
@@ -503,34 +471,73 @@ for ispec in range(0,9):
     #STELLAR MODEL
     ssub = np.where( (so.stel.v < v[0]) & (so.stel.v > v[-1]))[0]
     int_model = interp1d(so.stel.v[ssub],so.stel.s[ssub],kind='linear',
-                             bounds_error=False,fill_value=so.stel.s[-1])
+                             bounds_error=False,fill_value=so.stel.s[ssub][-1])
     stel_mod  = int_model(v)
     stel_mod  = -1*np.log(stel_mod/np.max(stel_mod))
+
+    # O2 Model
+    o2sub = np.where( (so.tap.v < v[0]) & (so.tap.v > v[-1]))[0]
+    int_model = interp1d(so.tap.v[o2sub],so.tap.o2[o2sub],kind='linear',
+                             bounds_error=False,fill_value=so.tap.o2[o2sub][-1])
+    o2_mod  = int_model(v)
+    o2_mod  = -1*np.log(o2_mod/np.max(o2_mod))
 
     # print
     print 'About to start the fitting process'
 
 	# First fit for speed dependent voigt
     out = opt.minimize(func,params_start,\
-        args=(v, s, unc, data, stel_mod),\
+        args=(v, s, unc, data, stel_mod,o2_mod),\
         method="SLSQP",bounds=bounds,options={'maxiter' : 100}) 
 
 	# Analyze outputs
     params = out['x']
-    model,stel = func(params, v, s,  unc, data, stel_mod, mode='get_model')
+    model,stel = func(params, v, s,  unc, data, stel_mod, o2_mod,mode='get_model')
     
     # Take out lines from spectrum (subtract b/c absorbance)
-    pickline =  np.where(np.abs(data['linecenter'] - linecenters[icent]) < 0.001)[0]
-    just_line = func(params, v, s,  unc, data, stel_mod, iline=pickline,mode='get_line')
-    
+    pickline =  np.where(np.abs(data['linecenter'] - linecenters[icent]) < 0.03)[0]
+    just_line = func(params, v, s,  unc, data, stel_mod, o2_mod, iline=pickline,mode='get_line')
+
+ ################# SAVE  ###########################    
     
     # Save spectra without any lines except isolated one
-    savename = fnames[ispec].replace('.','_spec')+'_line%s'%icent
-    np.savetxt('SavedLines/%s.txt' %(savename),zip(v,just_line),
-                fmt=('%f','%f'))
+    savename = fnames[ispec].replace('.','_spec')+'_line%s'%int(linecenters[icent])
+
+    # Save fit outputs 
+    nlines = len(data['I'])
+    nspec  = len(s)
+    p_lo = np.array(bounds)[:,0]
+    p_hi = np.array(bounds)[:,1]
+    frac =  (params-p_lo)/(p_hi-p_lo)
+
+    # Save to Fits
+    hdu1 = fits.BinTableHDU.from_columns(
+       [fits.Column(name='v', format='E', array=v),
+        fits.Column(name='s',format='E',array=just_line)
+         ])
+         
+    hdu = fits.BinTableHDU.from_columns(
+        [fits.Column(name='pnames', format='10A', array=pnames),
+        fits.Column(name='params',format='E',array=params),
+        fits.Column(name='params_start',format='E',array=params_start),
+        fits.Column(name='frac',format='E',array=frac)
+         ])
+         
+    hdr = fits.Header()
+    hdr['nlines'] = nlines
+    hdr['nspec']  = nspec
+    primary_hdu = fits.PrimaryHDU(header=hdr)
+    hdul = fits.HDUList([primary_hdu, hdu,hdu1])
 
 
+    if os.path.exists('SavedLines/%s.fits' %(savename)):
+         os.system('rm %s' % 'SavedLines/%s.fits' %(savename))
+         hdul.writeto('SavedLines/%s.fits' %(savename))
+    else:
+        hdul.writeto('SavedLines/%s.fits' %(savename))
 
+
+   
 ############################################################
     # Plot Best Fit
     ispec = 0
@@ -555,6 +562,11 @@ for ispec in range(0,9):
     p_hi = np.array(bounds)[:,1]
     frac =  (params-p_lo)/(p_hi-p_lo)
     plt.plot(np.arange(len(params)), frac,'o')
+    getsigs = np.where(pnames == 'sigs0')
+    plt.scatter(np.arange(len(params))[getsigs], frac[getsigs], c=(62+np.log(data['S'])))
+    getsigs = np.where(pnames == 'sigs2')
+    plt.scatter(np.arange(len(params))[getsigs], frac[getsigs], c=(62+np.log(data['S'])))
+
     plt.xlabel('Parameter Index')
     plt.ylabel('Fraction from Bounds')
     
