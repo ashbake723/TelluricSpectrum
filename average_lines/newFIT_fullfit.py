@@ -1,6 +1,6 @@
 
  
-# Get k factor for spectrum
+# Do fitting but with full hartmann line shape
 # opus2py documentation: file:///Users/ashbake/Documents/Research/Projects/TelluricCatalog/read_opus-1.5.0-Linux/doc/opus2py/opus2py-module.html
 
 # look into
@@ -246,10 +246,15 @@ def define_pararr(data,nlines,nspec,pstart=None):
 							np.zeros(nspec),      # dnu
 							np.zeros(nspec),      # vel
 							np.ones(nspec),       # taus
-							data['gamma-air'],    # sigs L
-							data['gamma-SD'],     # sigs 2
-							data['linecenter'],  # linecents
-							np.log10(data['S'])           # line strength
+							data['linecenter'],        # sg0 (line center)
+                            data['gamma-air'],         # gamD
+                            data['gamma-self'],        # gam0
+							data['gamma-SD'] ,         # gam2
+                            np.zeros(nlines),           # anuVc
+                            np.zeros(nlines),           # eta
+                            np.zeros(nlines),           # Shift0
+                            np.zeros(nlines),           # Shift2
+							np.log10(data['S'])         # line strength
 							))         
 							
 	par_lo = np.concatenate((np.ones(1)*0.99,      # stau
@@ -259,12 +264,26 @@ def define_pararr(data,nlines,nspec,pstart=None):
 							np.zeros(nspec)-0.5,   # dnu
 							np.zeros(nspec)-0.8,   # vel
 							np.ones(nspec)*0.1,    # taus
-                            data['gamma-air']*0.5,     # sigs
-							data['gamma-SD']*0.5,      # sigs
-							data['linecenter']-0.01,   # linecents
-							np.log10(data['S'])-0.3            # line strength
+							data['linecenter']-0.01,   # sg0 (line center)
+                            data['gamma-air']*0.5,     # gamD
+                            data['gamma-self']*0.9,    # gam0
+							data['gamma-SD']*0.5,      # gam2
+                            np.zeros(nlines),           # anuVc
+                            np.zeros(nlines),           # eta
+                            np.zeros(nlines),           # Shift0
+                            np.zeros(nlines),           # Shift2
+							np.log10(data['S'])-0.3     # line strength
 							))         
 
+bounds2       = ((-0.1,0.1), # sg0
+                (1e-5,0.01), # gamD
+                (0.01,0.5),  # gam0
+                (0.001,0.5), # gam2
+                (0,0.5),     # anuVC
+                (-0.1,0.1),  # eta
+                (0,1e-3),    # Shift0
+                (0,1e-3),    # Shift2
+                (0.1,1.0))   # line strength
 
 	par_hi = np.concatenate(( 
 							np.ones(1)*1.1,          # stau
@@ -274,10 +293,15 @@ def define_pararr(data,nlines,nspec,pstart=None):
 							np.zeros(nspec)+0.5,     # dnu
 							np.zeros(nspec)+0.8,     # vel
 							np.ones(nspec)*30.0,     # taus
-							data['gamma-air']*1.5,   # sigs0
-							data['gamma-SD']*1.5,    # sigs2
-							data['linecenter']+0.01, # linecents
-							np.log10(data['S'])+0.3            # line strength
+							data['linecenter']+0.01,   # sg0 (line center)
+                            data['gamma-air']*1.5,     # gamD
+                            data['gamma-self']*1.5,    # gam0
+							data['gamma-SD']*1.5,      # gam2
+                            np.zeros(nlines),           # anuVc
+                            np.zeros(nlines),           # eta
+                            np.zeros(nlines),           # Shift0
+                            np.zeros(nlines),           # Shift2
+							np.log10(data['S'])+0.3     # line strength
 							))         
 
 
@@ -289,9 +313,13 @@ def define_pararr(data,nlines,nspec,pstart=None):
 						 ['dnu']  * nspec + 
 						 ['vel']  * nspec + 
 						 ['taus'] * nspec + 
-						 ['sigs0'] * nlines + 
-						 ['sigs2'] * nlines +
-						 ['linecents'] * nlines +
+						 ['sg0']  * nlines + 
+						 ['gamD'] * nlines +
+						 ['gam0'] * nlines +
+						 ['anuVc'] * nlines +
+						 ['eta'] * nlines +
+						 ['Shift0']  * nlines + 
+						 ['Shift2'] * nlines +
 						 ['S'] * nlines
     					 )
 		
@@ -429,14 +457,13 @@ def setup_data(ifold, center, dk):
 	return vflat, -1*np.log(sflat),fnames
 
 
-
 #if __name__ == '__main__':
 for ispec in range(1,2):
     # User chosen things
     ifold           = 0  #folder index to work on
     icent           = 13
 #    ispec           = 0 
-    
+
     # Load linecents
     f = np.loadtxt('isolated_lines.txt')
     linecenters,indicents = f[:,0],f[:,1]
@@ -500,8 +527,10 @@ for ispec in range(1,2):
 
  ################# SAVE  ###########################    
     
+    print xxx # Break the code
+    
     # Save spectra without any lines except isolated one
-    savename = fnames[ispec].replace('.','_spec')+'_line%s'%int(linecenters[icent])
+    savename = fnames[ispec].replace('.','_spec_fulhartmann')+'_line%s'%int(linecenters[icent])
 
     # Save fit outputs 
     nlines = len(data['I'])
